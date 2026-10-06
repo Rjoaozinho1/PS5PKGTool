@@ -100,6 +100,19 @@ public class ScanCommandTests
     }
 
     [Fact]
+    public async Task Paths_with_control_characters_stay_on_one_line()
+    {
+        using var temp = new TempDir();
+        TestDump.Create(temp.Path, "odd\nname\u001b[31m");
+
+        CliResult result = await CliRunner.RunAsync("scan", temp.Path, "--quiet");
+
+        string[] lines = result.Out.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        Assert.DoesNotContain('\u001b', result.Out);
+    }
+
+    [Fact]
     public async Task Missing_folder_fails()
     {
         using var temp = new TempDir();

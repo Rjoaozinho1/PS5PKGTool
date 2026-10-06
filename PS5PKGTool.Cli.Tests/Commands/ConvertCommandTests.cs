@@ -116,6 +116,36 @@ public class ConvertCommandTests
     }
 
     [Fact]
+    public async Task Output_inside_the_dump_through_a_symlink_is_refused()
+    {
+        using var temp = new TempDir();
+        string dump = TestDump.Create(temp.Path);
+        string link = temp.Combine("linkdump");
+        Directory.CreateSymbolicLink(link, dump);
+
+        CliResult result = await CliRunner.RunAsync("convert", dump, "-o", Path.Combine(link, "game.ffpkg"));
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.StartsWith("error: the output must not be inside the source dump folder\n", result.Error);
+        Assert.False(File.Exists(Path.Combine(dump, "game.ffpkg")));
+    }
+
+    [Fact]
+    public async Task Dump_given_through_a_symlink_still_refuses_an_output_inside_it()
+    {
+        using var temp = new TempDir();
+        string dump = TestDump.Create(temp.Path);
+        string link = temp.Combine("linkdump");
+        Directory.CreateSymbolicLink(link, dump);
+
+        CliResult result = await CliRunner.RunAsync("convert", link, "-o", Path.Combine(dump, "game.ffpkg"));
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.StartsWith("error: the output must not be inside the source dump folder\n", result.Error);
+        Assert.False(File.Exists(Path.Combine(dump, "game.ffpkg")));
+    }
+
+    [Fact]
     public async Task Folder_that_is_not_a_dump_is_refused()
     {
         using var temp = new TempDir();

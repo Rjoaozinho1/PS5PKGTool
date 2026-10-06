@@ -55,6 +55,33 @@ public class ProgressReporterTests
     }
 
     [Fact]
+    public void Complete_erases_the_terminal_line_so_no_stale_percentage_is_left()
+    {
+        StringWriter error = Writer();
+        var progress = new ProgressReporter(error, ProgressMode.Terminal, () => 0);
+        const string line = "Verifying  0%  (0 B / 10 B)";
+
+        progress.Report(new Ps5ImageConversionProgress("Verifying", 0, 10));
+        progress.Complete();
+        progress.Report(new Ps5ImageConversionProgress("Late", 5, 10));
+        progress.Finish();
+
+        Assert.Equal("\r" + line + "\r" + new string(' ', line.Length) + "\r", error.ToString());
+    }
+
+    [Fact]
+    public void Complete_in_lines_mode_keeps_the_stage_lines()
+    {
+        StringWriter error = Writer();
+        var progress = new ProgressReporter(error, ProgressMode.Lines);
+
+        progress.Report(new Ps5ImageConversionProgress("Verifying", 0, 10));
+        progress.Complete();
+
+        Assert.Equal("Verifying\n", error.ToString());
+    }
+
+    [Fact]
     public void Unknown_total_shows_only_the_stage() =>
         Assert.Equal("Preparing", ProgressReporter.Format("Preparing", 0, 0, sizes: true));
 

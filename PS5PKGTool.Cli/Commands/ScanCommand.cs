@@ -33,7 +33,7 @@ internal sealed class ScanCommand : ICommand
             .ScanAsync(args.Positionals, recursive: !args.Has("no-recurse"), progress: context.Progress,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
-        context.Progress.Finish();
+        context.Progress.Complete();
         DumpSize.Fill(result.Games, cancellationToken);
 
         foreach (string error in result.Errors) context.Error.WriteLine("warning: " + error);
@@ -60,7 +60,7 @@ internal sealed class ScanCommand : ICommand
         game.SourceDescription,
         SizeFormat.Bytes(game.SourceSize),
         TableWriter.Truncate(Cell(game.Title), TitleWidth),
-        game.RootPath,
+        TableWriter.Clean(game.RootPath),
     ];
 
     private static string Cell(string value) => string.IsNullOrWhiteSpace(value) ? "-" : TableWriter.Clean(value);

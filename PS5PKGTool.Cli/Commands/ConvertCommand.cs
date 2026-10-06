@@ -55,7 +55,7 @@ internal sealed class ConvertCommand : ICommand
                 "--cluster and --no-ampr have no effect when wrapping an exFAT or FFPKG image into FFPFSC " +
                 "(the image is stored as-is)", Name);
         }
-        if (kind == SourceKind.DumpFolder && IsInside(outputFull, sourceFull))
+        if (kind == SourceKind.DumpFolder && IsInside(ResolveLinks(outputFull), ResolveLinks(sourceFull)))
             throw new UsageException("the output must not be inside the source dump folder", Name);
         if (isImage && !wrapsImage && !Ps5ImageConversionService.IsSupported(FormatOf(kind), target))
         {
@@ -77,7 +77,7 @@ internal sealed class ConvertCommand : ICommand
                 cancellationToken, options.Exfat, options.Ffpfsc, options.Ffpkg, temp).ConfigureAwait(false)
             : await Ps5ImageConversionService.ConvertAsync(sourceFull, outputFull, target, overwrite, context.Progress,
                 cancellationToken, options.Exfat, options.Ffpfsc, options.Ffpkg, temp).ConfigureAwait(false);
-        context.Progress.Finish();
+        context.Progress.Complete();
 
         string files = result.FileCount == 1 ? "1 file" : $"{result.FileCount} files";
         context.Out.WriteLine(
@@ -142,10 +142,35 @@ internal sealed class ConvertCommand : ICommand
         return full;
     }
 
+    // Ignores case on every OS: exFAT drives are case-insensitive even on Linux. The cost is a rare false
+    // refusal when two sibling folders differ only by case.
     private static bool IsInside(string path, string folder)
     {
         string prefix = Path.TrimEndingDirectorySeparator(folder) + Path.DirectorySeparatorChar;
-        return path.StartsWith(prefix,
-            OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+        return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Resolves symbolic links in every existing segment of an absolute path, so a link to the dump folder
+    /// cannot hide that the output is inside it. Segments that do not exist yet are kept as given.
+    /// </summary>
+    private static string ResolveLinks(string fullPath, int depth = 0)
+    {
+        string root = Path.GetPathRoot(fullPath) ?? string.Empty;
+        string current = root;
+        foreach (string segment in fullPath[root.Length..].Split(Path.DirectorySeparatorChar,
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+            if (depth > 32) continue; // link cycle
+            try
+            {
+                var info = new DirectoryInfo(current);
+                if (info.LinkTarget is not null && info.ResolveLinkTarget(returnFinalTarget: true) is { } target)
+                    current = ResolveLinks(target.FullName, depth + 1);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        return current;
     }
 }

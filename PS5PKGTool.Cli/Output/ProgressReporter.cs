@@ -45,6 +45,20 @@ internal sealed class ProgressReporter : IProgress<Ps5ImageConversionProgress>, 
 
     public void Report(Ps5ScanProgress value) => Update("Scanning", value.Processed, value.Total, sizes: false);
 
+    /// <summary>
+    /// Ends progress after success. In terminal mode the line is erased rather than kept, because throttled
+    /// redraws can leave a stale percentage (such as "Verifying 0%") above the result line.
+    /// </summary>
+    public void Complete()
+    {
+        lock (_gate)
+        {
+            if (_finished) return;
+            _finished = true;
+            if (_lineOpen) _error.Write("\r" + new string(' ', _lastWidth) + "\r");
+        }
+    }
+
     /// <summary>Ends the progress line. Safe to call more than once.</summary>
     public void Finish()
     {
