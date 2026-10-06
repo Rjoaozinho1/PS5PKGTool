@@ -4,6 +4,8 @@
 *.user
 *.suo
 artifacts/
-docs/
+docs/*
+!docs/superpowers/
 PS5PKGTool.SmokeTests/
 CHANGELOG.md
+dist/
