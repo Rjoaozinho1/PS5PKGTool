@@ -14,7 +14,8 @@ internal static class CliApp
         new("debug", OptionKind.Flag, "Show stack traces on errors"),
     ];
 
-    public static IReadOnlyList<ICommand> DefaultCommands { get; } = [new InfoCommand(), new ScanCommand()];
+    public static IReadOnlyList<ICommand> DefaultCommands { get; } =
+        [new InfoCommand(), new ScanCommand(), new ConvertCommand()];
 
     public static string Version
     {
