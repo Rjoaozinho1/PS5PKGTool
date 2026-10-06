@@ -34,6 +34,7 @@ internal sealed class ScanCommand : ICommand
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         context.Progress.Finish();
+        DumpSize.Fill(result.Games, cancellationToken);
 
         foreach (string error in result.Errors) context.Error.WriteLine("warning: " + error);
         Ps5GameInfo[] games = result.Games

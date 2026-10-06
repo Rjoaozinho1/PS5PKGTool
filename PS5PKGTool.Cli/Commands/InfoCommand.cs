@@ -43,6 +43,7 @@ internal sealed class InfoCommand : ICommand
             throw new InvalidDataException($"found {result.Games.Count} titles at {path}; use 'ps5pkg scan'");
 
         Ps5GameInfo game = result.Games[0];
+        DumpSize.Fill([game], cancellationToken);
         foreach (string warning in game.DataWarnings) context.Error.WriteLine("warning: " + warning);
         if (args.Has("json")) JsonOutput.Write(context.Out, game);
         else WriteText(context.Out, game);

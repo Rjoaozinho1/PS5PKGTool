@@ -34,6 +34,19 @@ public class ScanCommandTests
     }
 
     [Fact]
+    public async Task Dump_size_is_the_total_of_its_files()
+    {
+        using var temp = new TempDir();
+        string dump = TestDump.Create(temp.Path);
+        long expected = Directory.EnumerateFiles(dump, "*", SearchOption.AllDirectories).Sum(path => new FileInfo(path).Length);
+
+        CliResult result = await CliRunner.RunAsync("scan", temp.Path, "--json", "--quiet");
+
+        using JsonDocument document = JsonDocument.Parse(result.Out);
+        Assert.Equal(expected, document.RootElement[0].GetProperty("sourceSize").GetInt64());
+    }
+
+    [Fact]
     public async Task No_recurse_only_looks_at_the_top_level()
     {
         using var temp = new TempDir();

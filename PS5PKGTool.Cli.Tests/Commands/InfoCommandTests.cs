@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PS5PKGTool.Cli.Output;
 using PS5PKGTool.Ffpfsc;
 
 namespace PS5PKGTool.Cli.Tests.Commands;
@@ -25,6 +26,18 @@ public class InfoCommandTests
         Assert.Contains(Line("Format", "Dump Files"), result.Out);
         Assert.Contains(Line("Path", dump), result.Out);
         Assert.Equal(string.Empty, result.Error);
+    }
+
+    [Fact]
+    public async Task Dump_size_is_the_total_of_its_files()
+    {
+        using var temp = new TempDir();
+        string dump = TestDump.Create(temp.Path);
+        long expected = Directory.EnumerateFiles(dump, "*", SearchOption.AllDirectories).Sum(path => new FileInfo(path).Length);
+
+        CliResult result = await CliRunner.RunAsync("info", dump);
+
+        Assert.Contains(Line("Size", SizeFormat.Bytes(expected)), result.Out);
     }
 
     [Fact]
