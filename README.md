@@ -27,6 +27,9 @@ Suggestions are welcome. Report bugs [here](https://github.com/pearlxcore/PS5Pkg
 
 The release build is self-contained and includes the .NET runtime, so nothing else needs to be installed.
 
+A command-line version for Linux (`ps5pkg`: info, scan, image create/convert) lives in
+[`PS5PKGTool.Cli`](PS5PKGTool.Cli/README.md).
+
 # Features
 
 **Library Management**
