@@ -43,13 +43,17 @@ Success means:
 
 ```
 PS5PKGTool.Cli/            new  console app, net10.0, AssemblyName "ps5pkg"
-  Program.cs                    entry point: Ctrl+C wiring, calls Cli.RunAsync, sets exit code
-  Cli.cs                        RunAsync(args, stdout, stderr, isErrorTerminal, token) -> exit code; routing, global flags
-  Cli/ArgParser.cs              tokenizer + validation against an option spec
-  Cli/OptionSpec.cs             option declarations (name, alias, takes value, allowed values / range)
-  Cli/UsageException.cs
+  Program.cs                    entry point: Ctrl+C wiring, calls CliApp.RunAsync, sets exit code
+  CliApp.cs                     RunAsync(args, stdout, stderr, isErrorTerminal, token) -> exit code; routing, global flags
+  HelpText.cs                   general and per-command help
+  Parsing/ArgParser.cs          tokenizer + validation against an option spec
+  Parsing/OptionSpec.cs         option declarations (name, alias, takes value, allowed values / range)
+  Parsing/ParsedArgs.cs
+  Parsing/UsageException.cs
+  Commands/ICommand.cs          ICommand + CommandContext
   Commands/InfoCommand.cs
   Commands/ScanCommand.cs
+  Commands/ConvertOptions.cs    option specs, target resolution, option-object mapping (pure)
   Commands/ConvertCommand.cs
   Output/TableWriter.cs
   Output/JsonOutput.cs
@@ -69,8 +73,9 @@ WinForms project (and its out-of-repo DarkUI reference) never has to build on ma
 
 ### 3.2 Publish settings (`PS5PKGTool.Cli.csproj`)
 
-- `SelfContained=true`, `PublishSingleFile=true`, `EnableCompressionInSingleFile=true`
-  (expected size about 35 MB).
+- `SelfContained=true`, `PublishSingleFile=true`, `EnableCompressionInSingleFile=true`,
+  `IncludeNativeLibrariesForSelfExtract=true` (expected size about 35 MB). These are set only when a
+  `RuntimeIdentifier` is given, so the framework-dependent test project can reference the executable.
 - `InvariantGlobalization=true`. Without it, .NET on Linux needs libicu, which minimal distros and
   containers often lack.
 - No trimming in v1: `ProsperoPkgTool.dll` and the `System.Text.Json` output rely on reflection.
@@ -112,8 +117,8 @@ ps5pkg convert <source> -o <output> [--to exfat|ffpkg|ffpfsc] [--force] [--temp 
 ps5pkg --help | --version | <command> --help
 ```
 
-Global flags, accepted anywhere: `-h/--help`, `--version`, `--quiet` (no progress), `--debug`
-(stack traces on errors).
+Global flags: `-h/--help`, `--quiet` (no progress) and `--debug` (stack traces on errors) are accepted
+before or after the command. `--version` is accepted before it.
 
 ### 4.1 `info <path>`
 
@@ -189,7 +194,19 @@ Rules:
   ffpfsc targets. `FfpfscBuildOptions { Compression = … }` is passed for ffpfsc. `FfpkgBuildOptions`
   is passed for ffpkg. All others are `null`.
 
-**Output:** on success, one stdout line: `<output path>  <format>  <size>  (<file count> files)` from
+**Checks before any work starts** (the library would otherwise fail late, or not at all):
+
+| Situation | Result |
+|---|---|
+| Source folder without `sce_sys/param.json` | exit 1, `<source> is not a PS5 dump folder (no sce_sys/param.json)`. Stops a library folder from being packed into one image. |
+| Source file that is not a `.pkg` and whose signature is not exFAT/UFS2/PFS | exit 1, `<source> is not a PS5 dump folder, debug .pkg, or exFAT/FFPKG/FFPFSC image` |
+| Image source with a target the library can't convert to (same format) | exit 1, `converting this <format> image to <target> is not supported` |
+| Output path inside the source dump folder | exit 2. The image would include its own temp output. |
+| Output is an existing folder, or its parent folder is missing | exit 1 |
+| Output exists and no `--force` | exit 1, `the output already exists: <output> (use --force to overwrite)`. For dump and `.pkg` sources the library only notices at the very end, after the full build. |
+| `--temp` folder missing | exit 1 |
+
+**Output:** on success, one stdout line: `<output path>  <format>  <size>  (<n> file|files)` from
 `Ps5ImageConversionResult`. `--json` is not offered on `convert` in v1.
 
 ## 5. Internals
@@ -198,10 +215,11 @@ Rules:
 
 - `Program.Main` creates a `CancellationTokenSource` and hooks `Console.CancelKeyPress`. The first
   Ctrl+C sets `e.Cancel = true` and cancels the token. A second Ctrl+C lets the process terminate.
-  `Main` then calls `Cli.RunAsync(args, Console.Out, Console.Error, isErrorTerminal: !Console.IsErrorRedirected, token)`
+  `Main` then calls `CliApp.RunAsync(args, Console.Out, Console.Error, isErrorTerminal: !Console.IsErrorRedirected, token)`
   and returns its exit code.
-- `Cli.RunAsync` pulls out the global flags, picks the command by its first positional argument, and
-  catches exceptions (§5.5). Tests call it directly.
+- `CliApp.RunAsync` pulls out the global flags, picks the command by its first positional argument, and
+  catches exceptions (§5.5). It wraps stderr in `TextWriter.Synchronized`, because the library reports
+  progress from thread-pool threads. Tests call it directly.
 
 ### 5.2 Argument parser
 
@@ -239,8 +257,7 @@ and writes only to stderr.
 |---|---|---|
 | Success | — | 0 |
 | `UsageException` | `error: <message>` + `run 'ps5pkg <command> --help'` | 2 |
-| `IOException`, `InvalidDataException`, `FileNotFoundException`, `DirectoryNotFoundException`, `UnauthorizedAccessException`, `NotSupportedException` | `error: <message>` | 1 |
-| Any other exception | `error: <message>` (stack trace with `--debug`) | 1 |
+| Any other exception (IO, invalid data, not found, access denied, not supported, …) | `error: <message>`, plus the stack trace with `--debug` | 1 |
 | `OperationCanceledException` after Ctrl+C | `cancelled` | 130 |
 | `scan` finished with per-path errors | `warning:` lines | 1 |
 
